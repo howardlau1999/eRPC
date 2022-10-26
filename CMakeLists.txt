@@ -1,65 +1,25 @@
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 3.0)
 project(eRPC)
 
 include(CMakeDependentOption)
-
-set(CMAKE_CXX_STANDARD 11)
-set(CMAKE_CXX_STANDARD_REQUIRED True)
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-
-# Parse the build type
-if(PERF)
-  message(STATUS "Compilation optimized for performance.")
-  message(STATUS "Debugging is disabled.")
-  set(CMAKE_BUILD_TYPE RelWithDebInfo)
-  set(TESTING OFF)
-else(PERF)
-  message(STATUS "Compilation not optimized for performance.")
-  message(STATUS "Debugging is enabled. Perf will be low.")
-  set(CMAKE_BUILD_TYPE Debug)
-  SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0")
-
-  # For now, disable unit tests on Windows
-  if (NOT WIN32)
-    set(TESTING ON)
-  endif()
-endif(PERF)
 
 # Common sub-projects: HdrHistogram
 set(HDR_HISTOGRAM_BUILD_PROGRAMS OFF CACHE BOOL "Minimize HDR histogram build")
 set(HDR_LOG_REQUIRED OFF CACHE BOOL "Disable HDR histogram's log to avoid zlib dependency")
 add_subdirectory(third_party/HdrHistogram_c)
 
-# Common sub-projects: gtest
-set(INSTALL_GTEST OFF)
-add_subdirectory(third_party/googletest)
-enable_testing()
-include_directories(${gtest_SOURCE_DIR}/include ${gtest_SOURCE_DIR})
-
 # Common sub-projects: gflags
 add_subdirectory(third_party/gflags)
 
-# Common sub-projects: asio
-include_directories(SYSTEM third_party/asio/include)
-
 # Add additional compilation flags only after adding subprojects
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -march=native -Wall -Wextra -Werror -pedantic")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wsign-conversion -Wold-style-cast -Wno-unused-function")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-nested-anon-types -Wno-keyword-macro -Wno-deprecated-declarations")
 
-include_directories(${CMAKE_SOURCE_DIR}/src)
-include_directories(SYSTEM ${CMAKE_SOURCE_DIR}/third_party)
-
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/build)
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/build)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/build)
 
 # DPDK may be needed for different reasons (e.g., the transport is DPDK, or
 # if the transport is not DPDK but the application needs DPDK libraries)
 set(DPDK_NEEDED "false")
 
 # Options exposed to the user
-set(TRANSPORT "dpdk" CACHE STRING "Datapath transport (infiniband/raw/dpdk/fake)")
+set(TRANSPORT "infiniband" CACHE STRING "Datapath transport (infiniband/raw/dpdk/fake)")
 option(ROCE "Use RoCE if TRANSPORT is infiniband" OFF)
 option(AZURE "Configure DPDK for Azure if TRANSPORT is dpdk" OFF)
 option(PERF "Compile for performance" ON)
@@ -206,7 +166,7 @@ endif()
 
 # Generate config.h
 configure_file(src/config.h.in src/config.h)
-include_directories(${CMAKE_BINARY_DIR}/src)
+
 
 # MICA sources
 set(MICA_SOURCES
@@ -218,7 +178,6 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/scripts/autorun_app_file")
   file(STRINGS "scripts/autorun_app_file" APP)
 else()
   message(STATUS "No autorun_app_file found. No application will be compiled.")
-  return()
 endif()
 message(STATUS "Compiling app = " ${APP})
 
@@ -361,6 +320,10 @@ endif()
 
 # Compile the library
 add_library(erpc ${SOURCES})
+target_include_directories(erpc PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/src>" "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/src>"
+                                       "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>")
+target_include_directories(erpc PUBLIC third_party/asio/include)
+add_library(erpc::erpc ALIAS erpc)
 
 if(DPDK_NEEDED STREQUAL "true")
   if (NOT WIN32)
@@ -373,16 +336,6 @@ if(DPDK_NEEDED STREQUAL "true")
   endif()
 endif()
 
-# Using link-time optimization sometimes requires building with sources instead
-# of liberpc. See the hello world example's Makefile for an example of
-# compiling with liberpc.
-add_executable(${APP} apps/${APP}/${APP}.cc ${APP_ADDITIONAL_SOURCES} ${SOURCES})
-
-if(PERF)
-  target_compile_options(${APP} PRIVATE "-flto")
-endif()
-target_link_libraries(${APP} ${LIBRARIES})
-
 # Compile hello_world apps
 add_executable(hello_server hello_world/server.cc)
 target_link_libraries(hello_server erpc ${LIBRARIES})
@@ -391,6 +344,10 @@ target_link_libraries(hello_client erpc ${LIBRARIES})
 
 # Compile the tests
 if(TESTING)
+  set(INSTALL_GTEST OFF)
+  add_subdirectory(third_party/googletest)
+  enable_testing()
+  include_directories(${gtest_SOURCE_DIR}/include ${gtest_SOURCE_DIR})
   set(LIBRARIES ${LIBRARIES} gtest)
 
   # End-to-end tests with an RPC server and client
