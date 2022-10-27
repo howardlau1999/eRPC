@@ -323,6 +323,7 @@ add_library(erpc ${SOURCES})
 target_include_directories(erpc PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/src>" "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/src>"
                                        "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>")
 target_include_directories(erpc PUBLIC third_party/asio/include)
+target_link_libraries(erpc PUBLIC ${LIBRARIES})
 add_library(erpc::erpc ALIAS erpc)
 
 if(DPDK_NEEDED STREQUAL "true")
