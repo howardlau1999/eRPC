@@ -9,7 +9,10 @@ set(HDR_LOG_REQUIRED OFF CACHE BOOL "Disable HDR histogram's log to avoid zlib d
 add_subdirectory(third_party/HdrHistogram_c)
 
 # Common sub-projects: gflags
-add_subdirectory(third_party/gflags)
+option(ERPC_EXTERNAL_GFLAGS "Use an external gflags library" OFF)
+if (NOT ERPC_EXTERNAL_GFLAGS)
+  add_subdirectory(third_party/gflags)
+endif()
 
 # Add additional compilation flags only after adding subprojects
 
